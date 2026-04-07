@@ -1,6 +1,27 @@
 .PHONY: setup_billing_data  create_sa deploy
 
-install: setup_billing_data  create_sa
+install: enable_apis setup_billing_data  create_sa
+
+check-env:
+ifndef GOOGLE_CLOUD_PROJECT
+	$(error GOOGLE_CLOUD_PROJECT is undefined. Run 'export GOOGLE_CLOUD_PROJECT=your-project-id')
+endif
+
+enable_apis: check-env
+	@echo "Enabling Google Cloud APIs..."
+	@gcloud services enable \
+		compute.googleapis.com \
+		aiplatform.googleapis.com \
+		logging.googleapis.com \
+		monitoring.googleapis.com \
+		cloudscheduler.googleapis.com \
+		bigquery.googleapis.com \
+		iam.googleapis.com \
+		geminidataanalytics.googleapis.com \
+		discoveryengine.googleapis.com \
+		cloudresourcemanager.googleapis.com \
+		telemetry.googleapis.com \
+		--project=$(GOOGLE_CLOUD_PROJECT)
 
 setup_billing_data:
 	@uv run python scripts/setup_billing_data.py
