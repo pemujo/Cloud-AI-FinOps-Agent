@@ -1,33 +1,35 @@
-terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 7.0" 
-    }
-  }
-  backend "gcs" {
-    bucket = "opm-tests-tfstate"
-    prefix = "terraform/state"
-  }
+# --- 1. DATA & METADATA LOOKUP ---
+
+# Automatically read the Agent ID from the deployment JSON
+locals {
+  metadata_path = "${path.module}/../Cloud_AI_FinOps_Agent/deployment_metadata.json"
+  metadata      = jsondecode(file(local.metadata_path))
+  
+  # This grabs the full 'projects/.../reasoningEngines/...' path
+  agent_full_id = local.metadata["remote_agent_engine_id"]
 }
 
-provider "google" {
-  project = var.project_id
-  region  = var.region
-}
-
-# --- DATA SOURCES ---
+# Fetch project details (needed for the Project Number)
 data "google_project" "project" {
   project_id = var.project_id
 }
 
+# Fetch the default compute service account for the Scheduler to use
 data "google_compute_default_service_account" "default" {
   project = var.project_id
 }
 
-# --- MONITORING ---
+# --- 2. IAM PERMISSIONS ---
 
-# 1. Define the Channel
+# Grant Cloud Scheduler permission to act as the Service Account
+resource "google_service_account_iam_member" "scheduler_impersonate" {
+  service_account_id = data.google_compute_default_service_account.default.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
+}
+
+# --- 3. MONITORING & ALERTS ---
+
 resource "google_monitoring_notification_channel" "email_billing_alerts" {
   project      = var.project_id
   display_name = "Billing Anomaly Email Channel"
@@ -35,7 +37,6 @@ resource "google_monitoring_notification_channel" "email_billing_alerts" {
   labels       = { email_address = var.alert_email }
 }
 
-# 2. Define the Policy and link it to the Channel above
 resource "google_monitoring_alert_policy" "billing_anomaly_alert" {
   project      = var.project_id
   display_name = "billing-anomaly-detector"
@@ -49,7 +50,6 @@ resource "google_monitoring_alert_policy" "billing_anomaly_alert" {
     }
   }
 
-  # REQUIRED for log-based alerts
   alert_strategy {
     notification_rate_limit {
       period = "300s"
@@ -62,29 +62,25 @@ resource "google_monitoring_alert_policy" "billing_anomaly_alert" {
   ]
 }
 
-# --- SCHEDULER & IAM ---
-
-resource "google_service_account_iam_member" "scheduler_impersonate" {
-  service_account_id = data.google_compute_default_service_account.default.name
-  role               = "roles/iam.serviceAccountTokenCreator"
-  member             = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
-}
+# --- 4. SCHEDULER TRIGGER ---
 
 resource "google_cloud_scheduler_job" "finops_agent_trigger" {
-  name             = "finops-10min-anomaly-check"
-  schedule         = "0 * * * *"
-  region           = var.region
-  project          = var.project_id
+  name     = "finops-agent-trigger"
+  schedule = "0 9 * * *" # Runs daily at 9:00 AM
+  region   = var.region
+  project  = var.project_id
 
   http_target {
     http_method = "POST"
-    uri         = "https://${var.region}-aiplatform.googleapis.com/v1/projects/${var.project_id}/locations/${var.region}/reasoningEngines/${var.agent_id}:streamQuery"
+    
+    # Since agent_full_id is the full path from JSON, we just append the method
+    uri = "https://${var.region}-aiplatform.googleapis.com/v1/${local.agent_full_id}:streamQuery"
     
     body = base64encode(jsonencode({
       class_method = "async_stream_query"
       input = {
-        user_id = "u_123"
-        message = "is there an anomaly in my GCP billing the last week of February 2026 compared to the previous two months?"
+        user_id = "scheduler_bot"
+        message = "Run a standard billing audit for yesterday's costs and log any anomalies found."
       }
     }))
 
@@ -96,5 +92,6 @@ resource "google_cloud_scheduler_job" "finops_agent_trigger" {
     }
   }
 
+  # This is the only dependency we keep to ensure IAM is ready before the job fires
   depends_on = [google_service_account_iam_member.scheduler_impersonate]
 }
