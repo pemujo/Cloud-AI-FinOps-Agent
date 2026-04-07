@@ -117,3 +117,7 @@ terraform.rc
 *.sublime-project
 *.sublime-workspace
 .ipynb_checkpoints/
+
+
+# Exception: Allow .env.example to be tracked
+!.env.example
