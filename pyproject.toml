@@ -1,10 +1,30 @@
 [project]
 name = "cloud-ai-finops-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "A billing concierge powered by Gemini and ADK"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "google-adk>=1.27.3",
+    "google-adk>=1.28.1",
     "google-cloud-logging>=3.14.0",
 ]
+
+[tool.agent-starter-pack]
+# The built-in agent to use as a foundation
+base_template = "adk"
+
+# Override settings from the base template
+[tool.agent-starter-pack.settings]
+# This template will only support the 'agent_engine' deployment target
+deployment_targets = ["agent_engine"]
+# Optional: Customize the directory name for agent files (default: "app")
+agent_directory = "Cloud_AI_FinOps_Agent"
+
+[tool.ruff]
+line-length = 79  # Flake8 default
+target-version = "py310" # Example
+
+[tool.ruff.lint]
+# "E" (pycodestyle errors) + "F" (pyflakes) covers core flake8
+select = ["E", "F", "B", "I"] # Added Bugbear and isort
+ignore = []

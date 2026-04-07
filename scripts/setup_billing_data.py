@@ -1,0 +1,122 @@
+import os
+import json
+from pathlib import Path
+from dotenv import load_dotenv
+from google.cloud import bigquery
+from google.api_core import exceptions
+
+def draw_header(title, width=80):
+    """Draws a formatted header box for the CLI."""
+    print("=" * width)
+    print(f"| {title}".ljust(width - 1) + "|")
+    print("=" * width)
+
+def update_env(filepath, new_vars):
+    """Updates or appends variables in the .env file while preserving existing keys."""
+    lines = []
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            lines = f.readlines()
+    
+    # Filter out lines we are about to update
+    lines = [line for line in lines if not any(line.startswith(f"{k}=") for k in new_vars.keys())]
+    
+    # Append new values
+    for k, v in new_vars.items():
+        lines.append(f"{k}={v}\n")
+    
+    with open(filepath, "w") as f:
+        f.writelines(lines)
+
+def main():
+    agent_env = Path("Cloud_AI_FinOps_Agent/.env")
+    
+    # Load existing .env to use as defaults
+    load_dotenv(agent_env)
+    
+    # Context variables from .env or Shell
+    curr_execution_p = os.getenv("GOOGLE_CLOUD_PROJECT", "")
+    curr_billing_p = os.getenv("billing_export_Project_ID", "")
+    curr_d = os.getenv("billing_export_dataset", "")
+    curr_t = os.getenv("billing_export_table", "")
+
+    draw_header("💰 GCP Billing Data Setup")
+    print("1) Use an existing Billing export on BigQuery table.")
+    print("2) Load sample file (Recommended for Dev).")
+    
+    choice = input("\nSelect option [1-2]: ")
+
+    # 1. Determine the Execution Project (Where the Agent Runs)
+    # If GOOGLE_CLOUD_PROJECT is empty, we force a prompt.
+    exec_p = input(f"Enter Execution Project ID (where agent runs) [{curr_execution_p}]: ") or curr_execution_p
+    
+    if not exec_p:
+        print("❌ Error: Execution Project ID is required.")
+        return
+
+    final_vars = {"GOOGLE_CLOUD_PROJECT": exec_p}
+
+    if choice == "2":
+        draw_header("OPTION 2: SAMPLE DATA SETUP")
+        # For sample setup, billing and execution usually share the same project
+        dataset_id = input("Dataset name [billing_test]: ") or "billing_test"
+        table_id = "billing_sample_table"
+
+        client = bigquery.Client(project=exec_p)
+        dataset_ref = bigquery.DatasetReference(exec_p, dataset_id)
+
+        try:
+            client.get_dataset(dataset_ref)
+        except exceptions.NotFound:
+            print(f"Creating dataset {dataset_id}...")
+            client.create_dataset(bigquery.Dataset(dataset_ref))
+
+        table_ref = dataset_ref.table(table_id)
+        schema = client.schema_from_json("./mock_data/billing_schema.json")
+
+        job_config = bigquery.LoadJobConfig(
+            schema=schema,
+            source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+            time_partitioning=bigquery.TimePartitioning(
+                type_=bigquery.TimePartitioningType.DAY,
+                field="ingestion_time",
+            ),
+        )
+
+        print(f"Loading sample data into {exec_p}:{dataset_id}.{table_id}...")
+        try:
+            with open("./mock_data/billing_export_test_table.json", "rb") as source_file:
+                load_job = client.load_table_from_file(source_file, table_ref, job_config=job_config)
+            load_job.result()
+            print(f"✅ Successfully loaded {load_job.output_rows} rows.")
+        except Exception as e:
+            print(f"❌ BigQuery Load Failed: {e}")
+            return
+
+        final_vars.update({
+            "billing_export_Project_ID": exec_p,
+            "billing_export_dataset": dataset_id,
+            "billing_export_table": table_id
+        })
+
+    else:
+        draw_header("OPTION 1: EXISTING BILLING EXPORT SETUP")
+        # For production, the billing project might be different from the execution project
+        bq_project = input(f"Existing Billing Project ID [{curr_billing_p}]: ") or curr_billing_p
+        bq_dataset = input(f"Dataset name [{curr_d}]: ") or curr_d
+        bq_table = input(f"Table name [{curr_t}]: ") or curr_t
+
+        final_vars.update({
+            "billing_export_Project_ID": bq_project,
+            "billing_export_dataset": bq_dataset,
+            "billing_export_table": bq_table
+        })
+
+    # Persist all variables to the agent .env
+    update_env(agent_env, final_vars)
+    print("-" * 80)
+    print(f"✅ Setup Complete! Agent environment updated: {agent_env}")
+
+if __name__ == "__main__":
+    main()

@@ -1,21 +1,24 @@
+# 1. THE PROJECT IDENTITY
 variable "project_id" {
   type        = string
-  description = "The Google Cloud Project ID"
-}
-
-variable "alert_email" {
-  type        = string
-  description = "The email address for anomaly alerts"
+  description = "The GCP Project ID where resources will be deployed."
 }
 
 variable "region" {
   type        = string
   default     = "us-central1"
-  description = "The default region for resources"
+  description = "The GCP region for the Scheduler and Vertex AI."
 }
 
-variable "agent_id" {
+# 2. THE WORKFLOW TOGGLE
+variable "agent_deployed" {
+  type        = bool
+  default     = false
+  description = "Toggle to 'true' ONLY after running 'make deploy' to set up automation."
+}
+
+# 3. THE NOTIFICATION TARGET
+variable "alert_email" {
   type        = string
-  default     = "7928165481276506112"
-  description = "The Reasoning Engine ID for the FinOps Agent"
+  description = "The email address that will receive billing anomaly alerts."
 }
