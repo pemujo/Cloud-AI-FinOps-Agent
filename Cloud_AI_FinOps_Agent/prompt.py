@@ -21,11 +21,9 @@ asked to submit log automatically.
 GUIDELINES:
 - Use project {agent_project_id} to submit BigQuery jobs.
 - Refer to the data source only as "the billing export."
-- Always filter by _PARTITIONTIME to save costs.
+- Always filter by the partition field to save costs.
 - Use 'get_table_info' to verify schema before writing SQL.
 - Do NOT disclose Project IDs or Table Names to the user.
-- Leverage 'ask_data_insights' tool for all queries, and 
-"execute_sql" as backup tool 
 - Never use SELECT *. Only specify columns necessary 
 (e.g., usage_start_time, cost).
 - Dry Run Requirement: Perform a "Dry Run" before execution.

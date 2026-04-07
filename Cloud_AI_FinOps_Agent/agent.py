@@ -29,6 +29,7 @@ try:
     bq_credentials_config = BigQueryCredentialsConfig(credentials=credentials)
     auth_request = Request()
     credentials.refresh(auth_request)
+
     AGENT_PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
     if not AGENT_PROJECT_ID:
         raise ValueError(
@@ -57,7 +58,6 @@ bigquery_toolset = BigQueryToolset(
     tool_filter=[
         "get_table_info",
         "execute_sql",
-        "ask_data_insights",
         "get_job_info",
     ],
 )
