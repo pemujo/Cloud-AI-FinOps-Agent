@@ -121,3 +121,4 @@ terraform.rc
 
 # Exception: Allow .env.example to be tracked
 !.env.example
+!**/Makefile
