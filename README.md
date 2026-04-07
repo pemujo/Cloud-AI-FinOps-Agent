@@ -75,9 +75,9 @@ Initialize the project:
 
 ```bash
 uvx agent-starter-pack@latest create ${AGENT_NAME} \
-    --description "agent_engine" \
-    --agent-engine \
-    --agent pemujo/Cloud-AI-FinOps-Agent/
+    -d agent_engine \
+    -ag \
+    -a pemujo/Cloud-AI-FinOps-Agent
 
 cd ${AGENT_NAME}
 ```
