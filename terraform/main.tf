@@ -2,7 +2,7 @@
 
 # Automatically read the Agent ID from the deployment JSON
 locals {
-  metadata_path = "${path.module}/../Cloud_AI_FinOps_Agent/deployment_metadata.json"
+  metadata_path = "${path.module}/../deployment_metadata.json"
   metadata      = jsondecode(file(local.metadata_path))
   
   # This grabs the full 'projects/.../reasoningEngines/...' path
