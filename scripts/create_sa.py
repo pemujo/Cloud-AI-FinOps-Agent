@@ -1,10 +1,11 @@
 import os
+import time
 from pathlib import Path
 from typing import List, Union
 
 from dotenv import load_dotenv
 from google.api_core import exceptions
-from google.cloud import iam_admin_v1, resourcemanager_v3
+from google.cloud import bigquery, iam_admin_v1, resourcemanager_v3
 from google.iam.v1 import policy_pb2
 
 os.environ["GRPC_VERBOSITY"] = "NONE"
@@ -64,7 +65,8 @@ def create_service_account(project_id: str, sa_id: str) -> str:
     client = iam_admin_v1.IAMClient()
     project_path = f"projects/{project_id}"
     sa_email = f"{sa_id}@{project_id}.iam.gserviceaccount.com"
-
+    sa_resource_name = f"projects/{project_id}/serviceAccounts/{sa_email}"
+    
     try:
         print(f"-> Creating Service Account: {sa_id}...")
         client.create_service_account(
@@ -78,6 +80,33 @@ def create_service_account(project_id: str, sa_id: str) -> str:
         )
     except exceptions.AlreadyExists:
         print(f"  (Note: Service account {sa_id} already exists)")
+
+    # Wait for Propagation (
+    max_retries = 5
+    wait_interval = 3  # seconds
+    time.sleep(1)
+    print("⏳ Waiting for IAM propagation...")
+
+    for i in range(max_retries):
+        try:
+            client.get_service_account(request={"name": sa_resource_name})
+            print("  🚀 Service account is now active and ready.")
+            return sa_email
+        except (exceptions.NotFound, exceptions.InvalidArgument):
+            # These exceptions are expected while the SA is propagating
+            if i < max_retries - 1:
+                print(f"  ...still propagating (attempt {i+1}/{max_retries})...")
+                time.sleep(wait_interval)
+            else:
+                raise RuntimeError(
+                    f"❌ Timeout: Service account {sa_email} failed to propagate."
+                ) from None
+        except Exception as e:
+            if i < max_retries - 1:
+                print(f"  ⚠️ Unexpected error, retrying: {e}")
+                time.sleep(wait_interval)
+            else:
+                raise RuntimeError("❌ Unexpected error during IAM propagation.") from e
 
     return sa_email
 
@@ -139,22 +168,28 @@ def add_bigquery_table_iam_member(
         None: Updates table-level IAM policy.
     """
     client = bigquery.Client(project=project_id)
-    table_ref = f"{project_id}.{dataset_id}.{table_id}"
+    table_ref = client.dataset(dataset_id).table(table_id)
     
-    print(f"-> Granting {role} specifically on table: {table_ref}...")
+    print(f"-> Granting {role} specifically on table: {project_id}.{dataset_id}.{table_id}...")
     
     policy = client.get_iam_policy(table_ref)
-    
-    # Check if member already in binding
-    binding = next((b for b in policy.bindings if b.role == role), None)
+    binding = next((b for b in policy.bindings if b['role'] == role), None)
     
     if binding:
-        if member in binding.members:
-            print(f"  (Note: Member already has access to this table)")
+        if member in binding['members']:
+            print("  (Note: Member already has access to this table)")
             return
-        binding.members.append(member)
+
+        if isinstance(binding['members'], list):
+            binding['members'].append(member)
+        else:
+            binding['members'].add(member)
     else:
-        policy.bindings.append({"role": role, "members": {member}})
+
+        policy.bindings.append({
+            "role": role, 
+            "members": {member}
+        })
         
     client.set_iam_policy(table_ref, policy)
 
