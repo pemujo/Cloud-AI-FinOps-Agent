@@ -1,4 +1,4 @@
-# 💰 FinOps Billing Agent
+# 💰 Billing Concierge Agent
 This agent allows users to query Google Cloud billing and cost data using natural language. It is built with Google ADK, Vertex AI Reasoning Engine (formerly Generative AI Service Agent), and BigQuery.
 
 ## 📋 Prerequisites
