@@ -1,6 +1,7 @@
 import json
 import re
 import subprocess
+from pathlib import Path
 
 PROJECT_ID = "[your-project-id]"
 LOCATION = "us-central1"
@@ -36,8 +37,9 @@ def get_new_cost(service):
     return None
 
 def main():
-    input_file = "[your-home-directory]/.gemini/jetski/brain/[your-conversation-id]/scratch/golden_dataset_with_context.json"
-    output_file = "[your-home-directory]/.gemini/jetski/brain/[your-conversation-id]/scratch/golden_dataset_products_only.json"
+    base_path = Path("[your-home-directory]/.gemini/jetski/brain/[your-conversation-id]/scratch")
+    input_file = base_path / "golden_dataset_with_context.json"
+    output_file = base_path / "golden_dataset_products_only.json"
 
     with open(input_file, "r") as f:
         dataset = json.load(f)

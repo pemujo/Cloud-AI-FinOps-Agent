@@ -1,12 +1,15 @@
 import json
 import re
+
 import vertexai
 from vertexai import agent_engines
 
 # Initialize Vertex AI
 PROJECT_ID = "[your-project-id]"
 LOCATION = "us-central1"
-REMOTE_AGENT_ID = "projects/[your-project-number]/locations/us-central1/reasoningEngines/[your-engine-id]"
+REMOTE_AGENT_ID = ("projects/[your-project-number]/locations/us-central1/"
+                   "reasoningEngines/[your-engine-id]"
+)
 
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
@@ -50,13 +53,15 @@ def extract_cost(text):
     return None
 
 # Load dataset
-dataset_path = "[your-home-directory]/.gemini/jetski/brain/[your-conversation-id]/scratch/golden_dataset_products_only.json"
+dataset_path = ("[your-home-directory]/.gemini/jetski/brain/[your-conversation-id]/"
+                "scratch/golden_dataset_products_only.json")
 
 print(f"Loading dataset from {dataset_path}")
 with open(dataset_path, 'r') as f:
     dataset = json.load(f)
 
-CLARIFICATION_PROMPT = " for the entire period covered by the dataset. Please round all dollar amounts to two decimal places."
+CLARIFICATION_PROMPT = (" for the entire period covered by the dataset. "
+                        "Please round all dollar amounts to two decimal places.")
 
 passed = 0
 failed = 0
@@ -80,16 +85,16 @@ for item in dataset:
         actual_rounded = round(actual_cost, 2)
         
         if expected_rounded == actual_rounded:
-            print(f"RESULT: SUCCESS")
+            print("RESULT: SUCCESS")
             passed += 1
         else:
-            print(f"RESULT: FAIL (Mismatch)")
+            print("RESULT: FAIL (Mismatch)")
             failed += 1
     else:
-        print(f"RESULT: FAIL (Extraction failed)")
+        print("RESULT: FAIL (Extraction failed)")
         failed += 1
 
-print(f"\n=== Custom Verification Summary ===")
+print("\n=== Custom Verification Summary ===")
 print(f"Total Samples: {len(dataset)}")
 print(f"Passed: {passed}")
 print(f"Failed: {failed}")

@@ -1,15 +1,18 @@
+import json
+from pathlib import Path
+
 import pandas as pd
 import vertexai
 from vertexai import agent_engines
 from vertexai.preview.evaluation import EvalTask, MetricPromptTemplateExamples
-import json
-import os
 
 # Initialize Vertex AI
 PROJECT_ID = "[your-project-id]"
 LOCATION = "us-central1"
-REMOTE_AGENT_ID = "projects/[your-project-number]/locations/us-central1/reasoningEngines/[your-engine-id]"
-
+REMOTE_AGENT_ID = (
+    "projects/[your-project-number]/locations/"
+    "us-central1/reasoningEngines/[your-engine-id]"
+)
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
 # Define wrapper function for ADK agent
@@ -44,7 +47,9 @@ def reasoning_engine_model(prompt):
     return full_response
 
 # Load dataset
-dataset_path = "[your-home-directory]/.gemini/jetski/brain/[your-conversation-id]/scratch/golden_dataset_with_context.json"
+base_path = Path("[your-home-directory]/.gemini/jetski/brain/[your-conversation-id]/scratch")
+dataset_path = base_path / "golden_dataset_with_context.json"
+
 
 print(f"Loading dataset from {dataset_path}")
 with open(dataset_path, 'r') as f:
@@ -53,12 +58,14 @@ with open(dataset_path, 'r') as f:
 # Convert to pandas DataFrame
 eval_dataset = pd.DataFrame(data)
 
-CLARIFICATION_PROMPT = " for the entire period covered by the dataset. Please provide the exact numeric figures found in the source data without rounding."
+CLARIFICATION_PROMPT = ("For the entire period covered by the dataset. Please provide the "
+                        "exact numeric figures found in the source data without rounding."
+)
 
 # Execute Agent
 print("Executing agent on dataset...")
 responses = []
-for index, row in eval_dataset.iterrows():
+for _index, row in eval_dataset.iterrows():
     response = reasoning_engine_model(row['prompt'] + CLARIFICATION_PROMPT)
     responses.append(response)
 
@@ -66,7 +73,11 @@ for index, row in eval_dataset.iterrows():
 eval_dataset['response'] = responses
 # Augment prompt with context for evaluation
 eval_dataset['original_prompt'] = eval_dataset['prompt']
-eval_dataset['prompt'] = eval_dataset.apply(lambda row: f"Question: {row['prompt']}{CLARIFICATION_PROMPT}\nContext: {row['context']}", axis=1)
+eval_dataset['prompt'] = eval_dataset.apply(
+    lambda row: (
+        f"Question: {row['prompt']}{CLARIFICATION_PROMPT}\n"
+        f"Context: {row['context']}"
+    ), axis=1)
 
 # Define Evaluation Task
 eval_task = EvalTask(
@@ -90,6 +101,7 @@ print("\nDetailed Metrics Table:")
 print(result.metrics_table.head())
 
 # Save results
-output_path = "[your-home-directory]/.gemini/jetski/brain/[your-conversation-id]/scratch/eval_results.json"
+
+output_path = base_path / "eval_results.json"
 result.metrics_table.to_json(output_path, orient='records', indent=2)
 print(f"\nResults saved to {output_path}")

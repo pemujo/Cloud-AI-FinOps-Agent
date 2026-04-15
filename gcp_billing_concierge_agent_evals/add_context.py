@@ -1,6 +1,7 @@
 import json
 import re
 import subprocess
+from pathlib import Path
 
 
 def run_query(sql):
@@ -36,21 +37,28 @@ def get_context(prompt):
             return f"The total cost recorded in the dataset is {res[0]['total_cost']} USD."
 
     elif "top spending service" in prompt:
-        sql = f"SELECT service.description as service_desc, SUM(cost) as total_cost FROM {table} GROUP BY service_desc ORDER BY total_cost DESC LIMIT 1"
+        sql = f"""SELECT service.description as service_desc, SUM(cost) as total_cost FROM {table} 
+        GROUP BY service_desc ORDER BY total_cost DESC LIMIT 1"""
         res = run_query(sql)
         if res:
-            return f"The top spending service is {res[0]['service_desc']} with a cost of {res[0]['total_cost']} USD."
+            return (f"The top spending service is {res[0]['service_desc']} "
+                    f"with a cost of {res[0]['total_cost']} USD."
+            )
 
     elif "Which project had the highest spend" in prompt:
-        sql = f"SELECT project.name as project_name, SUM(cost) as total_cost FROM {table} GROUP BY project_name ORDER BY total_cost DESC LIMIT 1"
+        sql = f"""SELECT project.name as project_name, SUM(cost) as total_cost FROM {table} 
+        GROUP BY project_name ORDER BY total_cost DESC LIMIT 1"""
         res = run_query(sql)
         if res:
-            return f"The project with the highest spend was {res[0]['project_name']} with a cost of {res[0]['total_cost']} USD."
+            return (f"The project with the highest spend was {res[0]['project_name']} "
+                    f"with a cost of {res[0]['total_cost']} USD."
+            )
 
     match = re.search(r"How much did (.*) cost\?", prompt)
     if match and "project" not in prompt:
         service = match.group(1)
-        sql = f"SELECT SUM(cost) as total_cost FROM {table} WHERE service.description = '{service}'"
+        sql = f"""SELECT SUM(cost) as total_cost FROM {table} 
+                WHERE service.description = '{service}'"""
         res = run_query(sql)
         if res and res[0]["total_cost"] is not None:
             return f"The cost of {service} was {res[0]['total_cost']} USD."
@@ -76,7 +84,8 @@ def get_context(prompt):
     match = re.search(r"What was the total cost on (.*)\?", prompt)
     if match:
         date = match.group(1)
-        sql = f"SELECT SUM(cost) as total_cost FROM {table} WHERE DATE(usage_start_time) = '{date}'"
+        sql = f"""SELECT SUM(cost) as total_cost FROM {table} 
+                WHERE DATE(usage_start_time) = '{date}'"""
         res = run_query(sql)
         if res and res[0]["total_cost"] is not None:
             return (
@@ -97,7 +106,8 @@ def get_context(prompt):
     if match:
         service = match.group(1)
         project = match.group(2)
-        sql = f"SELECT SUM(cost) as total_cost FROM {table} WHERE service.description = '{service}' AND project.name = '{project}'"
+        sql = f"""SELECT SUM(cost) as total_cost FROM {table} 
+                WHERE service.description = '{service}' AND project.name = '{project}'"""
         res = run_query(sql)
         if res and res[0]["total_cost"] is not None:
             return f"In project '{project}', {service} cost {res[0]['total_cost']} USD."
@@ -106,8 +116,9 @@ def get_context(prompt):
 
 
 def main():
-    input_file = "[your-home-directory]/.gemini/jetski/brain/[your-conversation-id]/scratch/golden_dataset.json"
-    output_file = "[your-home-directory]/.gemini/jetski/brain/[your-conversation-id]/scratch/golden_dataset_with_context.json"
+    base_path = Path("[your-home-directory]/.gemini/jetski/brain/[your-conversation-id]/scratch")
+    input_file = base_path / "golden_dataset.json"
+    output_file = base_path / "golden_dataset_with_context.json"
 
     with open(input_file, "r") as f:
         dataset = json.load(f)
