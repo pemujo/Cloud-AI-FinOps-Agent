@@ -1,18 +1,51 @@
-.PHONY: setup_billing_data  create_sa deploy
+# --- Load env file ---
+ENV_FILE := Cloud_AI_FinOps_Agent/.env
+-include $(ENV_FILE)
 
--include Cloud_AI_FinOps_Agent/.env
+# ---  Verified Location ---
+ifeq ($(strip $(GOOGLE_CLOUD_LOCATION)),)
+    # We add the current directory to PYTHONPATH so the import works
+	ASP_LOCATION := $(shell PYTHONPATH=. python3 -c "import click; from Cloud_AI_FinOps_Agent.app_utils.deploy import deploy_agent_engine_app; print(next(o.default for o in deploy_agent_engine_app.params if o.name == 'location'))" 2>/dev/null)
+    ifneq ($(strip $(ASP_LOCATION)),)
+        GOOGLE_CLOUD_LOCATION := $(ASP_LOCATION)
+        _sync := $(shell echo "GOOGLE_CLOUD_LOCATION=$(GOOGLE_CLOUD_LOCATION)" >> $(ENV_FILE))
+        SOURCE_MSG := "Discovered from ASP run and saved to .env"
+    else
+        GOOGLE_CLOUD_LOCATION := UNKNOWN
+        SOURCE_MSG := "NOT FOUND"
+    endif
+else
+    SOURCE_MSG := "Loaded from .env"
+endif
 
-install: enable_apis setup_billing_data  create_sa
+# --- Get gcloud active Project ID ---
+G_SUGGESTION := $(shell gcloud config get-value project 2>/dev/null)
 
-GOOGLE_CLOUD_PROJECT ?= $(shell gcloud config get-value project 2>/dev/null)
+.PHONY: install check-env enable_apis setup_billing_data create_sa
+
+install:
+	@$(MAKE) check-env
+	@$(MAKE) enable_apis
+	@$(MAKE) setup_billing_data
+	@$(MAKE) create_sa
+
 
 check-env:
-ifeq ($(strip $(GOOGLE_CLOUD_PROJECT)),)
-	$(error "GOOGLE_CLOUD_PROJECT is not set in Env, .env file, or gcloud config. Please set it and try again.")
-endif
-	@echo "✅ Using Project: $(GOOGLE_CLOUD_PROJECT)"
+	@# Interactive Project Check
+	@if [ -z "$(GOOGLE_CLOUD_PROJECT)" ]; then \
+		read -p "GOOGLE_CLOUD_PROJECT variable not set. Use gcloud active project ID: [$(G_SUGGESTION)]? (Hit Enter for yes, or type the Project ID): " input; \
+		FINAL_ID=$${input:-$(G_SUGGESTION)}; \
+		if [ -z "$$FINAL_ID" ]; then echo "❌ Error: Project ID required."; exit 1; fi; \
+		echo "GOOGLE_CLOUD_PROJECT=$$FINAL_ID" >> $(ENV_FILE); \
+		echo "✅ Saved Project: $$FINAL_ID to .env"; \
+	else \
+		echo "✅ Project: $(GOOGLE_CLOUD_PROJECT)"; \
+	fi
+	@if [ "$(GOOGLE_CLOUD_LOCATION)" = "UNKNOWN" ]; then echo "❌ Location not set"; exit 1; fi
+	@echo "✅ Region:  $(GOOGLE_CLOUD_LOCATION)"
 
-enable_apis: check-env
+
+enable_apis:
 	@echo "Enabling Google Cloud APIs..."
 	@gcloud services enable \
 		compute.googleapis.com \
