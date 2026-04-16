@@ -31,32 +31,36 @@ If you do not have an existing export, the Agent Starter Pack setup includes an 
 
 ```text
 .
-├── GCP_billing_concierge /        # Root directory for Agent Logic
-│   ├── agent.py                   # Main Orchestrator Agent (Billing Concierge)
-│   ├── prompt.py                  # Orchestrator system instructions
-│   ├── deploy_agent.py            # Vertex AI Reasoning Engine deployment script
+├── GCP_billing_concierge /            # Root directory for Agent Logic
+│   ├── agent.py                       # Main Orchestrator Agent (Billing Concierge)
+│   ├── prompt.py                      # Orchestrator system instructions
+│   ├── .env.example                   # Sample .env file for setting env vars
 │   ├── tools/
-│   │   └── tools.py               # Custom tools for Logging
+│   │   └── tools.py                   # Custom tools for Logging
 │   └── sub_agents/
-│       └── finops_infra_agent/    # Specialized agent for Platform Ops
-│           ├── agent.py           # Sub-agent: Handles infrastructure tasks
-│           ├── prompt.py          # Sub-agent: Instructions for CRON and Monitoring
+│       └── finops_infra_agent/        # Specialized agent for Platform Ops
+│           ├── agent.py               # Sub-agent: Handles infrastructure tasks
+│           ├── prompt.py              # Sub-agent: Instructions for CRON and Monitoring
 │           └── tools/
-│                └── tools.py      # Custom tools (Scheduler, Alerts, Notifications)
-├── scripts/                 
-│   ├── setup_billing_data.py      # Configures BQ dataset (Real or Mock)
-│   └── create_sa.py               # Provisions the Agent Service Account & IAM
+│                └── tools.py          # Custom tools (Scheduler, Alerts, Notifications)
+├── deployment/                
+│   ├── deploy_agent.py                # Vertex AI Reasoning Engine deployment script 
+│   ├── setup_billing_data.py          # Configures BQ dataset (Real or Mock)
+│   └── create_sa.py                   # Provisions the Agent Service Account & IAM
+├── mock_data/  
+│   ├── billing_export_test_table.json # Sample billing dataset
+│   └── billing_schema.json            # Sample billing dataset schema
 ├── Makefile                       # One-stop shop for Install, Deploy, and Cleanup
 └── README.md
 ```
 
 ### Agent Architecture
-![Agent Architecture](agent_architecture.png)
+![Agent Architecture](agent_pattern.png)
 
 
-## 🔑 Permissions & Roles used
+### 🔑 Permissions & Roles used
 
-### For the Admin (You)
+#### For the Admin (You)
 * `roles/resourcemanager.projectIamAdmin`: To manage Service Account roles.
 * `roles/iam.serviceAccountAdmin`: To create the agent identity.
 * `roles/bigquery.admin`: To configure datasets and verify schemas.
@@ -65,7 +69,7 @@ If you do not have an existing export, the Agent Starter Pack setup includes an 
 * `roles/bigquery.dataViewer`: Minimum access needed to the existing **Billing Export table**
 
 
-### For the Agent (Service Account)
+#### For the Agent (Service Account)
 The `make install` script creates `gcp-billing-concierge-sa` (Service Account used by the agent) and grants the following roles:
 
 **Agent Project (Local Execution):**
@@ -115,17 +119,19 @@ make backend
 #### Step 3: Post-Deployment & Testing
 Once the deployment is complete:
 * Test the agent immediately via the Agent Engine Playground in the Google Cloud Console.
+
+
 * Optionally, to register the agent for use within Gemini Enterprise, run:
 ```bash
 make register-gemini-enterprise
 ```
 
 
-### GitHub clone and deploy (Work in progress)
+### GitHub clone and deploy
 
 This method is better suited for developers who want to customize the agent logic, modify the underlying tools, or integrate with existing infrastructure.
 
-### Step 1: Enable Required APIs
+#### Step 1: Enable Required APIs
 Set your project ID and enable the necessary Google Cloud services:
 
 ```bash
@@ -147,7 +153,7 @@ gcloud services enable \
     --project=$GOOGLE_CLOUD_PROJECT
 
 ```
-### Step 2: Environment Configuration
+#### Step 2: Environment Configuration
 
 Initialize your environment variables and install the required Python dependencies:
 
@@ -156,7 +162,7 @@ Initialize your environment variables and install the required Python dependenci
 uv sync
 
 # Create your .env file
-cp .env.example .env
+cp GCP_billing_concierge/.env.example GCP_billing_concierge/.env
 ```
 Update the `.env` file with your specific project and region details. If you already have a BigQuery billing export enabled, enter its details here to skip the sample data step.
 
@@ -174,30 +180,30 @@ BILLING_EXPORT_TABLE="your_table"
 
 ```
 
-### Step 3: Provision Billing Data (Optional)
+#### Step 3: Provision Billing Data (Optional)
 If you do not have a live billing export and wish to test with sample data, run the setup script and follow the prompts to create a mock dataset:
 
 
 ```bash
-uv run scripts/setup_billing_data.py
+uv run deployment/setup_billing_data.py
 ```
 
 
-### Step 4: Provision Identity & Permissions
+#### Step 4: Provision Identity & Permissions
 Run the provisioning script to create the agent's Service Account (`gcp-billing-concierge-sa@<project-id>.iam.gserviceaccount.com.iam.gserviceaccount.com`) and grant the required IAM roles across your project(s):
 
 ```bash
-uv run scripts/create_sa.py
+uv run deployment/create_sa.py
 ```
 
-### Step 5: Deployment (Still to complete script)
+#### Step 5: Deployment (Still to complete script)
 Deploy the agent to Vertex AI Agent Engine:
 
 ```bash
-uv run scripts/deploy.py
+uv run deployment/deploy_agent.py
 ```
 
-#### Appendix: Detailed Agent Starter Pack Flow
+## Appendix: Detailed Agent Starter Pack Flow
 
 If you choose the agent-starter-pack route, here is a brief overview of what happens under the hood:
 
@@ -226,7 +232,7 @@ This will verify the environmental variables are set, it will enable APIs, then 
 make install
 ```
 
-### 3. Deployment
+**Deployment**
 Use `make backend` to package the agent and deploy it to **Vertex AI Agent Engine** using Agent Starter Pack deploy script. It takes a few minutes to complete.
 
 ```bash
