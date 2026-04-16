@@ -9,6 +9,7 @@ dependencies = [
     "google-cloud-logging>=3.14.0",
     "google-cloud-scheduler>=2.19.0",
     "ruff>=0.15.10",
+    "tzlocal>=5.3.1",
 ]
 
 [tool.agent-starter-pack]

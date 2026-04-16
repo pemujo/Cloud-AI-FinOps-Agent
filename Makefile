@@ -88,7 +88,7 @@ deploy:
 	@$(MAKE) store_agent_id
 
 # --- Variables ---
-AGENT_ID_SECRET_NAME = finops-agent-id
+AGENT_ID_SECRET_NAME = billing-concierge-agent-id
 METADATA_FILE = deployment_metadata.json
 
 # --- New Target: Store Agent ID in Secret Manager ---

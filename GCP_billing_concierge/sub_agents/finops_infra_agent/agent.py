@@ -13,7 +13,6 @@ from .tools.tools import (
     create_billing_notification_channel,
     create_scheduler,
     delete_finops_resource,
-    get_agent_id_from_secrets,
     list_active_schedulers,
     list_alert_policies,
     list_notification_channels,
@@ -42,14 +41,14 @@ try:
             "GOOGLE_CLOUD_LOCATION is not set in environment or .env file."
         )
 
-    # Fetch Agent ID for Scheduler tools
-    try:
-        AGENT_ENGINE_ID = get_agent_id_from_secrets(AGENT_PROJECT_ID)
-    except Exception:
-        # During local dev, this will likely fail. We log it and move on.
-        logger.warning("""Running in local/dev mode: 
-                       AGENT_ENGINE_ID not found in Secret Manager.""")
-        AGENT_ENGINE_ID = "PENDING_DEPLOYMENT"
+    # # Fetch Agent ID for Scheduler tools
+    # try:
+    #     AGENT_ENGINE_ID = get_agent_id_from_secrets(AGENT_PROJECT_ID)
+    # except Exception:
+    #     # During local dev, this will likely fail. We log it and move on.
+    #     logger.warning("""Running in local/dev mode: 
+    #                    AGENT_ENGINE_ID not found in Secret Manager.""")
+    #     AGENT_ENGINE_ID = "PENDING_DEPLOYMENT"
 
 except Exception:
     logger.exception("Failed to initialize GCP environment or credentials.")
@@ -125,11 +124,13 @@ def setup_alert_policy(channel_ids: List[str]) -> str:
     return create_billing_alert_policy(os.environ.get("GOOGLE_CLOUD_PROJECT"), channel_ids)
 
 
-def schedule_audit(schedule: str, description: str) -> str:
+def schedule_audit(message: str, schedule: str, description: str) -> str:
     """
     Schedules or updates a recurring billing audit job.
 
     Args:
+        message: The prompt sent to the agent (e.g., Compare the total cost of 
+                 the **entire previous calendar month** against the average of the **three months prior**.)
         schedule (str): A cron expression (e.g., '0 9 * * 1' for Mondays at 9am).
         description (str): A two word description of the scheduled job 
                            (e.g. monthly-audit, daily-audit)
@@ -140,7 +141,8 @@ def schedule_audit(schedule: str, description: str) -> str:
     return create_scheduler(
         os.environ.get("GOOGLE_CLOUD_PROJECT"),
         GOOGLE_CLOUD_LOCATION,
-        AGENT_ENGINE_ID,
+        # AGENT_ENGINE_ID,
+        message,
         schedule,
         description,
     )

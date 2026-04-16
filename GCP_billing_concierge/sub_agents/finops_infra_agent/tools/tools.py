@@ -1,48 +1,43 @@
 import json
+import logging
 from typing import Any, Dict, List
 
+import tzlocal
 from google.api_core import exceptions
 from google.cloud import (
     monitoring_v3,
-    resourcemanager_v3,
     scheduler_v1,
     secretmanager,
 )
 
+logger = logging.getLogger(__name__)
+
 # --- 1. Helper functions ---
 
-def get_agent_id_from_secrets(project_id: str) -> str:
+def get_agent_id_from_secrets(project_id: str) -> str | None:
     """
-    Fetches the latest Agent ID from Secret Manager.
-
-    Args:
-        project_id (str): The GCP Project ID where the secret is stored.
-
-    Returns:
-        str: The decoded Agent ID string from the 'latest' secret version.
+    Fetches the latest Agent ID from Secret Manager with error handling.
     """
     client = secretmanager.SecretManagerServiceClient()
-    # The 'latest' alias always points to the most recent deployment
-    name = f"projects/{project_id}/secrets/finops-agent-id/versions/latest"
+    secret_name = "billing-concierge-agent-id"
+    name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
 
-    response = client.access_secret_version(request={"name": name})
-    return response.payload.data.decode("UTF-8")
+    try:
+        response = client.access_secret_version(request={"name": name})
+        return response.payload.data.decode("UTF-8")
 
+    except exceptions.NotFound:
+        logging.error("❌ Secret '%s' or version 'latest' "
+                      "not found in project %s.", secret_name, project_id)
+    except exceptions.PermissionDenied:
+        logging.error("🚫 Permission denied: Ensure the SA has "
+                      "'Secret Manager Secret Accessor' on %s.", secret_name)
+    except exceptions.InvalidArgument:
+        logging.error("⚠️ Invalid argument: Check if your project_id '%s' is correct.", project_id)
+    except Exception as e:
+        logging.error("🔥 An unexpected error occurred: %s", e)
 
-def get_project_number(project_id: str) -> str:
-    """
-    Retrieves the numeric Project ID required for default service account construction.
-
-    Args:
-        project_id (str): The alphanumeric GCP Project ID.
-
-    Returns:
-        str: The numeric project identifier as a string.
-    """
-    client = resourcemanager_v3.ProjectsClient()
-    res = client.get_project(name=f"projects/{project_id}")
-    return res.name.split("/")[-1]
-
+    return None
 
 # --- 2. LISTING TOOLS  ---
 
@@ -199,7 +194,7 @@ def create_billing_alert_policy(project_id: str, channel_ids: List[str]) -> str:
 
 
 def create_scheduler(
-    project_id: str, region: str, agent_full_id: str, schedule: str, description: str
+    project_id: str, region: str, message: str, schedule: str, description: str
 ) -> str:
     """
     Schedules or updates the Cloud Scheduler to trigger Agent in Agent Engine.
@@ -208,6 +203,8 @@ def create_scheduler(
         project_id (str): The GCP Project ID.
         region (str): The region (e.g., 'us-central1').
         agent_full_id (str): The full resource name of the Reasoning Engine.
+        message: The prompt sent to the agent (e.g., Compare the total cost of 
+        the **entire previous calendar month** against the average of the **three months prior**.)
         schedule (str): A cron expression (e.g., "0 9 * * *" for daily).
         description (str): A two word description of the scheduled job 
                            (e.g. monthly-audit, daily-audit)
@@ -218,14 +215,25 @@ def create_scheduler(
     client = scheduler_v1.CloudSchedulerClient()
     parent = f"projects/{project_id}/locations/{region}"
     job_name = f"{parent}/jobs/billing-concierge-{description}"
+    agent_full_id = get_agent_id_from_secrets(project_id)
 
-    project_num = get_project_number(project_id)
+    
+    local_tz = "UTC"
+    try:
+        local_tz = tzlocal.get_localzone_name()
+    except Exception:
+        pass
 
-    compute_sa = f"{project_num}-compute@developer.gserviceaccount.com"
+
+    service_account_id = "gcp-billing-concierge-sa"
+    scheduler_sa = f"{service_account_id}@{project_id}.iam.gserviceaccount.com"
+
+    logger.info("compute_sa account used in schduler %s, timezone: %s", scheduler_sa, local_tz)
 
     job = {
         "name": job_name,
-        "schedule": schedule,  # Dynamic cron string passed by the Agent
+        "schedule": schedule,  
+        "time_zone": local_tz,
         "http_target": {
             "uri": f"https://{region}-aiplatform.googleapis.com/v1/{agent_full_id}:streamQuery",
             "http_method": scheduler_v1.HttpMethod.POST,
@@ -234,18 +242,19 @@ def create_scheduler(
                 {
                     "class_method": "async_stream_query",
                     "input": {
-                        "user_id": "scheduler_bot",
-                        "message": f"Run billing audit for schedule: {schedule}",
+                        "user_id": "billing_concierge_audit",
+                        "message": message,
                     },
                 }
             ).encode("utf-8"),
             "oauth_token": {
-                "service_account_email": compute_sa,
+                "service_account_email": scheduler_sa,
                 "scope": "https://www.googleapis.com/auth/cloud-platform",
             },
         },
     }
 
+    logger.error(job)
     try:
         # Try to create the job first
         client.create_job(parent=parent, job=job)
@@ -256,6 +265,7 @@ def create_scheduler(
         client.update_job(job=job, update_mask=update_mask)
         return f"SUCCESS: Updated existing job to new schedule '{schedule}'"
     except Exception as e:
+        logger.error("ERROR: Failed to schedule audit: %s", str(e))
         return f"ERROR: Failed to schedule audit: {str(e)}"
 
 

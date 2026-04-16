@@ -151,6 +151,40 @@ def add_iam_member(project_id: str, roles: List[str], member: str) -> None:
     else:
         print("  (Note: All roles already assigned)")
 
+def grant_sa_user_role_on_self(project_id: str, sa_email: str) -> None:
+    """
+    Grants the 'Service Account User' role to the service account on its own 
+    resource. This is often required for Cloud Scheduler or other services 
+    to 'act as' this specific account.
+    """
+    client = iam_admin_v1.IAMClient()
+    # The resource name is the SA itself
+    resource = f"projects/{project_id}/serviceAccounts/{sa_email}"
+    member = f"serviceAccount:{sa_email}"
+    role = "roles/iam.serviceAccountUser"
+
+    print(f"-> Granting {role} to {sa_email} on its own resource...")
+
+    try:
+        policy = client.get_iam_policy(request={"resource": resource})
+        
+        # Check if the binding already exists
+        binding = next((b for b in policy.bindings if b.role == role), None)
+        if binding:
+            if member in binding.members:
+                print("  (Note: SA User role already assigned on self)")
+                return
+            binding.members.append(member)
+        else:
+            new_binding = policy_pb2.Binding(role=role, members=[member])
+            policy.bindings.append(new_binding)
+
+        client.set_iam_policy(request={"resource": resource, "policy": policy})
+        print("  ✅ Successfully granted self-user permissions.")
+    except Exception as e:
+        print(f"  ⚠️ Warning: Failed to grant self-user role: {e}")
+
+
 def add_bigquery_table_iam_member(
     project_id: str, dataset_id: str, table_id: str, role: str, member: str
 ) -> None:
@@ -252,7 +286,7 @@ def main() -> None:
             "roles/bigquery.dataViewer", 
             sa_member
         )
-
+    grant_sa_user_role_on_self(local_project, email_address)
     # 4. Update .env
     update_env(agent_env, "AGENT_SERVICE_ACCOUNT", email_address)
 
